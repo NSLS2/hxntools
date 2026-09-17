@@ -311,7 +311,13 @@ class HXNFlyerPanda(Device):
             SISHDF5Handler.HANDLER_NAME,
             root=self.LARGE_FILE_DIRECTORY_ROOT,
             resource_path=self.__read_filepath_sis,
-            resource_kwargs={"frame_per_point": self.frame_per_point},
+            # `frame_per_point` here is the number of samples represented by a single
+            # Datum, i.e. the true per-row length (see describe_collect() for the
+            # matching descriptor shape) -- not the raw, supersampled PandA gate
+            # count in `self.frame_per_point`.
+            resource_kwargs={
+                "frame_per_point": self.frame_per_point // self.position_supersample
+            },
             path_semantics="posix",
         )
 
@@ -342,7 +348,14 @@ class HXNFlyerPanda(Device):
                     'ROI_HDF5_FLY',
                     root=self.LARGE_FILE_DIRECTORY_ROOT,
                     resource_path=self.__read_filepath_xsp_roi,
-                    resource_kwargs={"frame_per_point": self.frame_per_point},
+                    # Same true per-row length as the SIS resource above (and
+                    # describe_collect()'s declared shape) -- required so that
+                    # BlueskyRunV3.validate() can reconcile the on-disk,
+                    # single-column-per-ROI dataset shape with the declared
+                    # [1, num_scan_points] structure.
+                    resource_kwargs={
+                        "frame_per_point": self.frame_per_point // self.position_supersample
+                    },
                     path_semantics="posix",
                 )
 
@@ -500,7 +513,16 @@ class HXNFlyerPanda(Device):
 
         ext_spec = "FileStore:"
 
-        num_scan_points = self.frame_per_point
+        # `frame_per_point` (== `self._npts` previously) is the raw number of
+        # PandA gates captured, which is `position_supersample` gates per
+        # real scan point (see kickoff()/flyscan_pd()). The SIS scaler and
+        # Xspress3 ROI exporters both collapse that oversampling before
+        # writing their HDF5 files (ExportSISDataPanda.export() and
+        # ExportXpsROI.export(), called with frame_per_point /
+        # position_supersample in complete()), so the declared per-row
+        # length for those keys must match the reduced, on-disk point count
+        # -- not the raw supersampled gate count.
+        num_scan_points = self.frame_per_point // self.position_supersample
 
         def _spec(source):
             return {

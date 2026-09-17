@@ -47,6 +47,13 @@ Homepage = "https://github.com/NSLS-II-HXN/hxntools"
 Discussions = "https://github.com/NSLS-II-HXN/hxntools/discussions"
 Changelog = "https://github.com/NSLS-II-HXN/hxntools/releases"
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "bluesky-tiled-plugins>=2.0.11",
+    "tiled[server]>=0.2.18",
+]
+
 [tool.setuptools]
 include-package-data = true
 
