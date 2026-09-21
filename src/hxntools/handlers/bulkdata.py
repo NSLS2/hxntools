@@ -1,6 +1,4 @@
 from .hxn_handler import HXNHandlerBase
-from databroker.assets.handlers import HandlerBase
-import h5py
 
 
 class BulkMerlin(HXNHandlerBase):

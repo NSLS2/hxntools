@@ -1,5 +1,4 @@
 from __future__ import print_function
-import itertools
 import logging
 
 from ophyd import (AreaDetector, CamBase, TIFFPlugin, Component as Cpt,
@@ -10,10 +9,9 @@ from ophyd.areadetector import (EpicsSignalWithRBV as SignalWithRBV)
 from ophyd.areadetector.filestore_mixins import (FileStoreTIFF,
                                                  FileStorePluginBase)
 
-from .utils import (makedirs, make_filename_add_subdirectory)
+from .utils import (makedirs)
 from .trigger_mixins import (HxnModalTrigger, FileStoreBulkReadable)
 
-from pathlib import PurePath
 
 logger = logging.getLogger(__name__)
 

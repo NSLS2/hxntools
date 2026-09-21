@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm[toml]>=7"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "hxntools"
@@ -47,12 +47,22 @@ Homepage = "https://github.com/NSLS-II-HXN/hxntools"
 Discussions = "https://github.com/NSLS-II-HXN/hxntools/discussions"
 Changelog = "https://github.com/NSLS-II-HXN/hxntools/releases"
 
-[tool.setuptools]
-include-package-data = true
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3",
+]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["hxntools*"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools_scm]
-write_to = "src/hxntools/_version.py"
+[tool.hatch.build.targets.wheel]
+packages = ["src/hxntools"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/hxntools/_version.py"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["F"]

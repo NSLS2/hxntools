@@ -328,7 +328,6 @@ class HxnZebra(Zebra):
     def mode_internal(self):
         super().mode_internal()
 
-        scan_type = self.mode_settings.scan_type.get()
         # no concept of internal triggering for now
         # raise ValueError('Unknown scan type for internal triggering: '
         #                  '{}'.format(scan_type))
