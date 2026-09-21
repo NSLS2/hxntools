@@ -1,17 +1,10 @@
 from databroker.v0 import Broker
 from databroker.headersource.mongo import MDS
 from databroker.assets.mongo import Registry
-from databroker.headersource.core import doc_or_uid_to_uid
+from databroker.headersource.core import BAD_KEYS_FMT, doc_or_uid_to_uid
 from databroker.assets.handlers import HandlerBase
-from jsonschema import validate as js_validate
-from collections import deque
 
 import numpy as np
-import pandas as pd
-import warnings
-import uuid
-import certifi
-import os
 import six
 import pymongo
 import h5py
@@ -317,7 +310,6 @@ class CompositeBroker(Broker):
             if f_benchmark:
                 f_benchmark.write("\n scan_id: {} \n".format(doc['scan_id']))
                 f_benchmark.flush()
-            datum_counts = {}
 
         ts =  str(datetime.now().timestamp())
 
@@ -335,7 +327,7 @@ class CompositeBroker(Broker):
 logger = logging.getLogger(__name__)
 
 FMT_ROI_KEY = 'entry/instrument/detector/NDAttributes/CHAN{}ROI{}'
-from databroker.assets.handlers import HandlerBase, ImageStack
+from databroker.assets.handlers import ImageStack
 
 
 class HDF5DatasetSliceHandler(HandlerBase):
@@ -378,7 +370,6 @@ class HDF5DatasetSliceHandler(HandlerBase):
         return self._data_objects[point_number]
 
     def open(self):
-        import h5py
         if self._file:
             return
 

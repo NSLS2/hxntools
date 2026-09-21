@@ -7,6 +7,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.venv/
 env/
 bin/
 build/
@@ -94,5 +95,5 @@ __enamlcache__/
 # PyBuilder
 target/
 
-# setuptools_scm
+# Generated version metadata
 src/hxntools/_version.py

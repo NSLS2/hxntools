@@ -1,44 +1,41 @@
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm[toml]>=7"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "hxntools"
 dynamic = ["version"]
 description = "NSLS-II Hard X-ray Nanoprobe data acquisition tools"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "BSD-3-Clause"
-authors = [
-    {name = "Brookhaven National Laboratory", email = "DAMA@bnl.gov"}
-]
+authors = [{ name = "Brookhaven National Laboratory", email = "DAMA@bnl.gov" }]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Intended Audience :: Science/Research",
-    "Intended Audience :: Developers",
-    "Natural Language :: English",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "bluesky",
-    "boltons",
-    "cycler",
-    "databroker",
-    "h5py",
-    "matplotlib",
-    "nslsii",
-    "numpy",
-    "ophyd",
-    "pandas",
-    "pyepics",
-    "scipy",
+  "bluesky",
+  "boltons",
+  "cycler",
+  "databroker",
+  "h5py",
+  "matplotlib",
+  "nslsii",
+  "numpy",
+  "ophyd",
+  "pandas",
+  "pyepics",
+  "scipy",
 ]
 
 [project.urls]
@@ -47,19 +44,26 @@ Homepage = "https://github.com/NSLS-II-HXN/hxntools"
 Discussions = "https://github.com/NSLS-II-HXN/hxntools/discussions"
 Changelog = "https://github.com/NSLS-II-HXN/hxntools/releases"
 
-[project.optional-dependencies]
-test = [
-    "pytest>=8.0",
-    "bluesky-tiled-plugins>=2.0.11",
-    "tiled[server]>=0.2.18",
+[dependency-groups]
+dev = [
+  "pre-commit>=4.3",
+  "pytest>=8.0",
+  "bluesky-tiled-plugins>=2.0.11",
+  "tiled[server]>=0.2.18",
 ]
 
-[tool.setuptools]
-include-package-data = true
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["hxntools*"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/hxntools"]
 
-[tool.setuptools_scm]
-write_to = "src/hxntools/_version.py"
+[tool.hatch.build.hooks.vcs]
+version-file = "src/hxntools/_version.py"
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["src"]
+
+[tool.ruff.lint]
+select = ["F"]
