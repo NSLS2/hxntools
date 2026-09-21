@@ -528,6 +528,10 @@ class HXNFlyerPanda(Device):
             return {
                 "external": ext_spec,
                 "dtype": "array",
+                # ExportSISDataPanda/ExportXpsROI both hardcode a 32-bit float
+                # HDF5 dataset (dtype="f") for every scaler/ROI channel; declare
+                # it here so downstream consumers don't have to guess/default.
+                "dtype_str": "<f4",
                 "shape": [num_scan_points],
                 "source": source,
             }

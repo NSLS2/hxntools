@@ -1,22 +1,4 @@
-"""Integration test for HXNFlyerPanda's per-row (declared) array shape.
-
-Regression test for the DESCRIPTOR_10X_LENGTH bug: the scaler ("sclr1_ch*")
-and Xspress3-ROI ("Det{n}_<element>", "xspress3_channel{n}_rois_roi{m}") keys
-declared a per-row length equal to the raw, `position_supersample`-oversampled
-PandA gate count instead of the real number of scan points. Every 2D/1D PandA
-fly-scan plan in hxn-profile-collection (`fly2dpd`, `fly1dpd`, `timescanpd`,
-...) defaults `position_supersample=10`.
-
-Drives the real `hxntools.panda_flyer.HXNFlyerPanda` (no mock of the class
-itself) through kickoff/complete/collect using fake `panda`/`sclr`/`xspress3`
-stand-ins for the hardware-facing objects, writes real HDF5 files in the same
-one-flat-dataset-per-channel layout `ExportSISDataPanda`/`ExportXpsROI` use,
-and validates the resulting array shapes via a real, in-process Tiled server
-(`bluesky_tiled_plugins.TiledWriter`).
-
-Run with: `pytest tests/test_panda_flyer.py -v` (from an environment with
-`pip install -e ".[test]"`).
-"""
+"""Integration tests for HXNFlyerPanda."""
 
 import os
 from types import SimpleNamespace
@@ -53,25 +35,6 @@ def _alias_dataset(doc):
         if legacy_key in dk:
             dk["dataset"] = dk.pop(legacy_key)
     doc["datum_kwargs"] = dk
-    return doc
-
-
-def _fix_external_dtype(doc):
-    """RunNormalizer patch: declare the true on-disk dtype for the legacy
-    SIS/ROI external array data keys.
-
-    `ExportSISDataPanda`/`ExportXpsROI` both write their flat HDF5 datasets
-    with a hardcoded 32-bit float dtype (`dtype="f"`), but `describe_collect()`'s
-    `_spec()` predates the `dtype_numpy`/`dtype_str` descriptor convention and
-    leaves those keys' dtype unset. Left unset, `bluesky_tiled_plugins` falls
-    back to the JSON-schema default (`float64`) and then rejects the
-    mismatched on-disk dtype at read time. This mirrors the kind of
-    normalizer patch a Tiled deployment supplies for these HXN-specific
-    legacy handler specs.
-    """
-    for key in SCLR_CHANNELS + ROI_NAMES:
-        if key in doc.get("data_keys", {}):
-            doc["data_keys"][key]["dtype_str"] = "<f4"
     return doc
 
 
@@ -266,7 +229,7 @@ def test_flyer_declares_true_point_count(tiled_client, tmp_path, position_supers
     writer = TiledWriter(
         tiled_client,
         normalizer=RunNormalizer,
-        patches={"datum": _alias_dataset, "descriptor": _fix_external_dtype},
+        patches={"datum": _alias_dataset},
     )
     RE = RunEngine({})
     RE.subscribe(writer)
