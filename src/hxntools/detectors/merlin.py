@@ -1,6 +1,5 @@
 from __future__ import print_function
 import logging
-from pathlib import PurePath
 from ophyd import (AreaDetector, CamBase, TIFFPlugin, Component as Cpt,
                    HDF5Plugin, Device, StatsPlugin, ProcessPlugin,
                    ROIPlugin, TransformPlugin, EpicsSignal)

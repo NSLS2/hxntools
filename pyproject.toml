@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm[toml]>=7"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "hxntools"
 dynamic = ["version"]
 description = "NSLS-II Hard X-ray Nanoprobe data acquisition tools"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "BSD-3-Clause"
 authors = [
     {name = "Brookhaven National Laboratory", email = "DAMA@bnl.gov"}
@@ -21,7 +21,6 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
@@ -47,12 +46,23 @@ Homepage = "https://github.com/NSLS-II-HXN/hxntools"
 Discussions = "https://github.com/NSLS-II-HXN/hxntools/discussions"
 Changelog = "https://github.com/NSLS-II-HXN/hxntools/releases"
 
-[tool.setuptools]
-include-package-data = true
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3",
+]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["hxntools*"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools_scm]
-write_to = "src/hxntools/_version.py"
+[tool.hatch.build.targets.wheel]
+packages = ["src/hxntools"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/hxntools/_version.py"
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["src"]
+
+[tool.ruff.lint]
+select = ["F"]

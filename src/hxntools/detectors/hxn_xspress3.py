@@ -1,6 +1,4 @@
 from collections import OrderedDict, namedtuple
-import uuid
-import itertools
 import logging
 import time
 import numpy as np
@@ -10,8 +8,8 @@ from ophyd.areadetector.plugins import PluginBase
 from ophyd.status import DeviceStatus
 from ophyd.device import (BlueskyInterface, Staged)
 
-from nslsii.detectors.xspress3 import (XspressTrigger, Xspress3Detector,
-                                       Xspress3FileStore, Xspress3ROI)
+from nslsii.detectors.xspress3 import (Xspress3Detector,
+                                       Xspress3FileStore)
 from .trigger_mixins import HxnModalBase
 
 import pandas as pd

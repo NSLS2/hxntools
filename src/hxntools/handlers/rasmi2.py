@@ -1,6 +1,4 @@
 from .hxn_handler import HXNHandlerBase
-from databroker.assets.handlers import HandlerBase
-import h5py
 
 class SISHDF5Handler(HXNHandlerBase):
     HANDLER_NAME = "SIS_HDF51_FLY_STREAM_V1"
