@@ -163,7 +163,10 @@ def _fake_panda():
 
 def _fake_scaler(channel_names, real_points):
     channels = SimpleNamespace(
-        **{f"chan{i}": SimpleNamespace(name=name) for i, name in enumerate(channel_names, start=1)}
+        **{
+            f"chan{i}": SimpleNamespace(name=name)
+            for i, name in enumerate(channel_names, start=1)
+        }
     )
     mca_by_index = {
         i: SimpleNamespace(
@@ -173,7 +176,9 @@ def _fake_scaler(channel_names, real_points):
         )
         for i in range(1, len(channel_names) + 1)
     }
-    return SimpleNamespace(channels=channels, stop_all=_FakeSignal(), mca_by_index=mca_by_index)
+    return SimpleNamespace(
+        channels=channels, stop_all=_FakeSignal(), mca_by_index=mca_by_index
+    )
 
 
 def _fake_xspress3(roi_names, real_points):
@@ -284,4 +289,6 @@ def test_flyer_declares_true_point_count(tiled_client, tmp_path, position_supers
         assert node.structure().shape == (1, REAL_POINTS)
         assert node.read().shape == (1, REAL_POINTS)
 
-    assert tiled_client[uid].validate(fix_errors=False, raise_on_error=True, write_notes=False)
+    assert tiled_client[uid].validate(
+        fix_errors=False, raise_on_error=True, write_notes=False
+    )
