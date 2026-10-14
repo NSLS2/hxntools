@@ -60,7 +60,6 @@ counter.1.out_mode: On-Change
 counter.1.out_offset: 0.0
 counter.1.out_scale: 1.0
 counter.1.out_units: ''
-counter.1.set_: 0
 counter.1.start: 0
 counter.1.step: 0.0
 counter.1.trig: ZERO
@@ -79,7 +78,6 @@ counter.2.out_mode: On-Change
 counter.2.out_offset: 0.0
 counter.2.out_scale: 1.0
 counter.2.out_units: ''
-counter.2.set_: 0
 counter.2.start: 0
 counter.2.step: 0.0
 counter.2.trig: ZERO
@@ -98,7 +96,6 @@ counter.3.out_mode: On-Change
 counter.3.out_offset: 0.0
 counter.3.out_scale: 1.0
 counter.3.out_units: ''
-counter.3.set_: 0
 counter.3.start: 0
 counter.3.step: 0.0
 counter.3.trig: ZERO
@@ -117,7 +114,6 @@ counter.4.out_mode: On-Change
 counter.4.out_offset: 0.0
 counter.4.out_scale: 1.0
 counter.4.out_units: ''
-counter.4.set_: 0
 counter.4.start: 0
 counter.4.step: 0.0
 counter.4.trig: ZERO
@@ -136,7 +132,6 @@ counter.5.out_mode: On-Change
 counter.5.out_offset: 0.0
 counter.5.out_scale: 1.0
 counter.5.out_units: ''
-counter.5.set_: 0
 counter.5.start: 0
 counter.5.step: 0.0
 counter.5.trig: ZERO
@@ -155,7 +150,6 @@ counter.6.out_mode: On-Change
 counter.6.out_offset: 0.0
 counter.6.out_scale: 1.0
 counter.6.out_units: ''
-counter.6.set_: 0
 counter.6.start: 0
 counter.6.step: 0.0
 counter.6.trig: ZERO
@@ -174,7 +168,6 @@ counter.7.out_mode: On-Change
 counter.7.out_offset: 0.0
 counter.7.out_scale: 1.0
 counter.7.out_units: ''
-counter.7.set_: 0
 counter.7.start: 0
 counter.7.step: 0.0
 counter.7.trig: ZERO
@@ -193,19 +186,11 @@ counter.8.out_mode: On-Change
 counter.8.out_offset: 0.0
 counter.8.out_scale: 1.0
 counter.8.out_units: ''
-counter.8.set_: 0
 counter.8.start: 0
 counter.8.step: 0.0
 counter.8.trig: ZERO
 counter.8.trig_delay: 0
 counter.8.trig_edge: Rising
-data.capture: false
-data.capture_mode: FIRST_N
-data.create_directory: 0
-data.flush_period: 1.0
-data.hdf_directory: /data/2026/10/14
-data.hdf_file_name: panda_rbdata_20261014_103407_fd26e0.h5
-data.num_capture: 4000
 div.1.divisor: 10.0
 div.1.enable: ONE
 div.1.enable_delay: 0
@@ -316,7 +301,6 @@ inenc.1.lsb_discard: 0.0
 inenc.1.msb_discard: 0.0
 inenc.1.protocol: Quadrature
 inenc.1.rst_on_z: '0'
-inenc.1.setp: 0
 inenc.1.val_capture: Value
 inenc.1.val_dataset: ''
 inenc.1.val_offset: 0.0
@@ -336,7 +320,6 @@ inenc.2.lsb_discard: 0.0
 inenc.2.msb_discard: 0.0
 inenc.2.protocol: Quadrature
 inenc.2.rst_on_z: '0'
-inenc.2.setp: 0
 inenc.2.val_capture: Value
 inenc.2.val_dataset: ''
 inenc.2.val_offset: 0.0
@@ -356,7 +339,6 @@ inenc.3.lsb_discard: 0.0
 inenc.3.msb_discard: 0.0
 inenc.3.protocol: Quadrature
 inenc.3.rst_on_z: '0'
-inenc.3.setp: 0
 inenc.3.val_capture: Value
 inenc.3.val_dataset: ''
 inenc.3.val_offset: 0.0
@@ -376,7 +358,6 @@ inenc.4.lsb_discard: 0.0
 inenc.4.msb_discard: 0.0
 inenc.4.protocol: Quadrature
 inenc.4.rst_on_z: '0'
-inenc.4.setp: 0
 inenc.4.val_capture: Value
 inenc.4.val_dataset: ''
 inenc.4.val_offset: 0.0
@@ -598,7 +579,6 @@ outenc.4.qperiod_units: s
 outenc.4.val: ZERO
 outenc.4.z: ZERO
 outenc.4.z_delay: 0
-pcap.arm: true
 pcap.bits0_capture: 'No'
 pcap.bits0_dataset: ''
 pcap.bits1_capture: 'No'
