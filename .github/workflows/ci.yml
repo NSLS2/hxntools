@@ -80,3 +80,6 @@ jobs:
               except ImportError as e:
                   print(f'⚠ {module} import failed: {e}')
           "
+
+      - name: Run tests
+        run: uv run --locked --group test pytest -q
