@@ -1,8 +1,8 @@
 """Finite SIS3820 MCS acquisition through the EPICS mca module.
 
-Counts are collected as scalar integer EventPages in an independent stream.
-Live collection requests fresh MCA readout and waits for its completion before
-publishing counts. Acquiring=Done is the sequencer's final-readout barrier.
+Counts are read once after acquisition completes and collected as scalar integer
+EventPages in an independent stream. Acquiring=Done is the sequencer's
+final-readout barrier.
 """
 
 import asyncio
@@ -31,7 +31,6 @@ from ophyd_async.core import (
     StrictEnum,
     SubsetEnum,
     TriggerInfo,
-    TriggerableCommand,
     YesNo,
     observe_signals_value,
     soft_signal_r_and_setter,
@@ -70,14 +69,6 @@ class Sis3820McaIO(EpicsDevice):
     nmax: A[SignalR[int], PvSuffix(".NMAX")]
     nuse: A[SignalRW[int], PvSuffix(".NUSE")]
     description: A[SignalR[str], PvSuffix(".DESC")]
-    reading: A[SignalR[bool], PvSuffix(".RDNG")]
-    read_time: A[SignalR[float], PvSuffix(".RTIM")]
-    erase: A[TriggerableCommand, PvSuffix(".ERAS")]
-
-    def __init__(self, prefix: str, name: str = "") -> None:
-        # The mca record can defer put-callback until acquisition finishes.
-        self.read_array = epics_signal_w(bool, f"{prefix}.READ", wait=False)
-        super().__init__(prefix, name=name)
 
 
 class Sis3820McsIO(EpicsDevice):
@@ -85,7 +76,7 @@ class Sis3820McsIO(EpicsDevice):
 
     acquiring: A[SignalR[bool], PvSuffix("Acquiring")]
     current_channel: A[SignalR[int], PvSuffix("CurrentChannel")]
-    max_channels: A[SignalR[int], PvSuffix("MaxChannels")t ]
+    max_channels: A[SignalR[int], PvSuffix("MaxChannels")]
     nuse_all: A[SignalRW[int], PvSuffix("NuseAll")]
     channel_advance: A[SignalRW[Sis3820ChannelAdvance], PvSuffix("ChannelAdvance")]
     input_mode: A[SignalRW[Sis3820InputMode], PvSuffix("InputMode")]
@@ -115,128 +106,30 @@ class _Snapshot:
     timestamps: dict[int, float]
 
 
-class Sis3820Readout:
-    """Own a single acquisition's valid prefix and collection cursor."""
-
-    def __init__(self, mcs: Sis3820McsIO) -> None:
-        self.mcs = mcs
-        self.expected: int | None = None
-        self.collected = 0
-        self.final_snapshot: _Snapshot | None = None
-        self.failure: Exception | None = None
-        self.lock = asyncio.Lock()
-
-    def reset(self) -> None:
-        self.expected = None
-        self.collected = 0
-        self.final_snapshot = None
-        self.failure = None
-
-    async def _refresh(self, mca: Sis3820McaIO) -> None:
-        # RTIM identifies a new read request within this record; it is not an
-        # acquisition timestamp or a cross-record clock comparison. RDNG=False
-        # then means that request's asyn callback has installed the array.
-        async with aclosing(
-            observe_signals_value(mca.read_time, mca.reading, timeout=DEFAULT_TIMEOUT)
-        ) as updates:
-            await anext(updates)
-            previous = await mca.read_time.get_value(cached=False)
-            await mca.read_array.set(True)
-            async for signal, value in updates:
-                if signal is mca.read_time and value != previous:
-                    break
-            if not await mca.reading.get_value(cached=False):
-                return
-            async for _, _ in updates:
-                if not await mca.reading.get_value(cached=False):
-                    return
-
-    async def snapshot(self, *, final: bool = False) -> _Snapshot:
-        if self.expected is None:
-            raise RuntimeError("Prepare SIS3820 before collecting data")
-        # Read the sequencer's barrier before the arrays, not HardwareAcquiring.
-        acquiring = await self.mcs.acquiring.get_value(cached=False)
-        final = final or not acquiring
-        count = await self.mcs.current_channel.get_value(cached=False)
-        if acquiring:
-            await asyncio.gather(*(self._refresh(mca) for mca in self.mcs.mcas.values()))
-        readings = await asyncio.gather(
-            *(mca.data.read(cached=False) for mca in self.mcs.mcas.values())
-        )
-        nords = await asyncio.gather(
-            *(mca.nord.get_value(cached=False) for mca in self.mcs.mcas.values())
-        )
-        values = {}
-        timestamps = {}
-        for (n, mca), reading, nord in zip(self.mcs.mcas.items(), readings, nords, strict=True):
-            value = reading[mca.data.name]
-            values[n] = value["value"]
-            timestamps[n] = value["timestamp"]
-            if final and (nord != self.expected or len(values[n]) != self.expected):
-                raise RuntimeError(
-                    f"SIS3820 channel {n} ended with NORD={nord}, "
-                    f"array length={len(values[n])}; expected {self.expected} bins"
-                )
-        if final and (acquiring or count != self.expected):
-            raise RuntimeError(
-                f"SIS3820 acquisition ended with {count} of {self.expected} bins "
-                f"(Acquiring={acquiring})"
-            )
-        # The mca record/driver can return one dummy element at zero bins.
-        # CurrentChannel is nextChan_ in drvSIS38XX, a completed-bin count.
-        valid = min(count, *nords, *(len(value) for value in values.values()))
-        if valid < self.collected or count > self.expected:
-            raise RuntimeError(
-                f"SIS3820 bin count changed unexpectedly: completed={count}, "
-                f"valid={valid}, collected={self.collected}, expected={self.expected}"
-            )
-        return _Snapshot(valid, values, timestamps)
-
-    async def finish(self) -> None:
-        async with self.lock:
-            self.final_snapshot = await self.snapshot(final=True)
-
-    async def next_page(self, name: str) -> PartialEventPage | None:
-        async with self.lock:
-            if self.failure is not None:
-                raise self.failure
-            snapshot = self.final_snapshot or await self.snapshot()
-            start, stop = self.collected, snapshot.count
-            if start == stop:
-                return None
-            length = stop - start
-            timestamp = max(snapshot.timestamps.values())
-            data = {f"{name}-point_index": np.arange(start, stop, dtype=np.int64)}
-            timestamps = {f"{name}-point_index": [timestamp] * length}
-            for n, values in snapshot.values.items():
-                key = f"{name}-channel{n}"
-                data[key] = values[start:stop]
-                timestamps[key] = [snapshot.timestamps[n]] * length
-            self.collected = stop
-            return {"time": [timestamp] * length, "data": data, "timestamps": timestamps}
-
-
 class Sis3820Acquisition(FlyableLogic[TriggerInfo, TriggerInfo]):
-    """Coordinate finite arming and final readout; publication does not arm."""
+    """Coordinate finite arming and one final readout."""
 
     def __init__(
         self,
         mcs: Sis3820McsIO,
-        readout: Sis3820Readout,
         input_mode: Sis3820InputMode,
         input_polarity: Sis3820Polarity,
         count_on_start: bool,
     ) -> None:
         self.mcs = mcs
-        self.readout = readout
         self.input_mode = input_mode
         self.input_polarity = input_polarity
         self.count_on_start = count_on_start
+        self._prepared = False
+        self._completed = False
+        self._snapshot: _Snapshot | None = None
         self._completion_task: asyncio.Task | None = None
 
     async def on_stage(self) -> None:
         await self.stop()
-        self.readout.reset()
+        self._prepared = False
+        self._completed = False
+        self._snapshot = None
 
     async def _set_acquiring(self, command: SignalW[bool], acquiring: bool) -> None:
         # Own the iterator so returning on a match releases its subscription.
@@ -245,27 +138,47 @@ class Sis3820Acquisition(FlyableLogic[TriggerInfo, TriggerInfo]):
         ) as values:
             await anext(values)
             await command.set(True)
-            current = await self.mcs.acquiring.get_value(cached=False)
-            if current == acquiring:
+            if await self.mcs.acquiring.get_value(cached=False) == acquiring:
                 return
             async for _, value in values:
                 if value == acquiring:
                     return
 
-    async def _erase_record(self, mca: Sis3820McaIO) -> None:
-        async with aclosing(
-            observe_signals_value(mca.nord, timeout=DEFAULT_TIMEOUT)
-        ) as values:
-            await anext(values)
-            await mca.erase.trigger()
-            if await mca.nord.get_value(cached=False) == 0:
-                return
-            async for _, value in values:
-                if value == 0:
-                    return
+    async def _stop_hardware(self) -> None:
+        await self._set_acquiring(self.mcs.stop_all, False)
+
+    async def _read_final(self, expected: int) -> _Snapshot:
+        # Read the sequencer's barrier before the arrays, not HardwareAcquiring.
+        acquiring = await self.mcs.acquiring.get_value(cached=False)
+        count = await self.mcs.current_channel.get_value(cached=False)
+        readings = await asyncio.gather(
+            *(mca.data.read(cached=False) for mca in self.mcs.mcas.values())
+        )
+        nords = await asyncio.gather(
+            *(mca.nord.get_value(cached=False) for mca in self.mcs.mcas.values())
+        )
+        values = {}
+        timestamps = {}
+        for (n, mca), reading, nord in zip(
+            self.mcs.mcas.items(), readings, nords, strict=True
+        ):
+            value = reading[mca.data.name]
+            values[n] = value["value"]
+            timestamps[n] = value["timestamp"]
+            if nord != expected or len(values[n]) != expected:
+                raise RuntimeError(
+                    f"SIS3820 channel {n} ended with NORD={nord}, "
+                    f"array length={len(values[n])}; expected {expected} bins"
+                )
+        if acquiring or count != expected:
+            raise RuntimeError(
+                f"SIS3820 acquisition ended with {count} of {expected} bins "
+                f"(Acquiring={acquiring})"
+            )
+        return _Snapshot(count, values, timestamps)
 
     async def on_prepare(self, value: TriggerInfo) -> TriggerInfo:
-        if self.readout.expected is not None:
+        if self._prepared:
             raise RuntimeError("Stage SIS3820 before preparing another acquisition")
         if value.trigger is not DetectorTrigger.EXTERNAL_LEVEL:
             raise ValueError("SIS3820 supports EXTERNAL_LEVEL triggering only")
@@ -293,15 +206,14 @@ class Sis3820Acquisition(FlyableLogic[TriggerInfo, TriggerInfo]):
             *(mca.nuse.set(count) for mca in self.mcs.mcas.values()),
         )
         await self.mcs.nuse_all.set(count)
-        # Clear each record's NORD and buffer explicitly. EraseStart only erases
-        # the driver's buffer, so old MCA arrays otherwise survive until ReadAll.
-        await asyncio.gather(*(self._erase_record(mca) for mca in self.mcs.mcas.values()))
-        self.readout.expected = count
         try:
             await self._set_acquiring(self.mcs.erase_start, True)
         except BaseException:
             await self.stop()
             raise
+        self._prepared = True
+        self._completed = False
+        self._snapshot = None
         return value
 
     async def on_kickoff(self, ctx: TriggerInfo) -> TriggerInfo:
@@ -322,13 +234,32 @@ class Sis3820Acquisition(FlyableLogic[TriggerInfo, TriggerInfo]):
                 async for signal, value in updates:
                     if signal is self.mcs.acquiring and not value:
                         break
-            await self.readout.finish()
-        except Exception as error:
-            self.readout.failure = error
-            await self._set_acquiring(self.mcs.stop_all, False)
+            self._snapshot = await self._read_final(ctx.number_of_events)
+            self._completed = True
+        except Exception:
+            await self._stop_hardware()
             raise
         finally:
             self._completion_task = None
+
+    def next_page(self, name: str) -> PartialEventPage | None:
+        if not self._completed:
+            raise RuntimeError("Complete SIS3820 before collecting data")
+        snapshot = self._snapshot
+        if snapshot is None:
+            return None
+        timestamp = max(snapshot.timestamps.values())
+        data = {f"{name}-channel{n}": values for n, values in snapshot.values.items()}
+        timestamps = {
+            f"{name}-channel{n}": [snapshot.timestamps[n]] * snapshot.count
+            for n in snapshot.values
+        }
+        self._snapshot = None
+        return {
+            "time": [timestamp] * snapshot.count,
+            "data": data,
+            "timestamps": timestamps,
+        }
 
     async def stop(self) -> None:
         try:
@@ -338,15 +269,15 @@ class Sis3820Acquisition(FlyableLogic[TriggerInfo, TriggerInfo]):
                 with suppress(asyncio.CancelledError):
                     await task
         finally:
-            await self._set_acquiring(self.mcs.stop_all, False)
+            await self._stop_hardware()
 
 
 class Sis3820Mcs(StandardFlyable[TriggerInfo, TriggerInfo], StandardReadable):
     """SIS3820 flyer publishing integer counts in its own Bluesky stream.
 
     Each stage supports one finite EXTERNAL_LEVEL acquisition. Prepare erases
-    and arms; kickoff does not touch hardware. One externally latched bin maps
-    to one Event, identified by a zero-based ``<name>-point_index``.
+    and arms; kickoff does not touch hardware. Complete the acquisition before
+    collecting one Event per externally latched bin.
 
     The external wiring must provide both next pulses and counting inhibit for
     the selected input mode/polarity. With CountOnStart enabled, inhibit must
@@ -354,8 +285,8 @@ class Sis3820Mcs(StandardFlyable[TriggerInfo, TriggerInfo], StandardReadable):
     Channel 1's reference-clock choice is recorded, not changed.
 
     Event timestamps are MCA record readout timestamps, not per-bin exposure
-    timestamps. Align other detector/position streams by point index; the SIS
-    does not reconstruct times or positions. Collect it separately from
+    timestamps. Align other detector/position streams by Bluesky Event sequence;
+    the SIS does not reconstruct times or positions. Collect it separately from
     file-writing detectors, using ``declare_stream(sis, collect=True, ...)``.
     """
 
@@ -376,9 +307,8 @@ class Sis3820Mcs(StandardFlyable[TriggerInfo, TriggerInfo], StandardReadable):
         self.channel_numbers, _ = soft_signal_r_and_setter(
             Array1D[np.int32], np.asarray(channel_numbers, dtype=np.int32)
         )
-        self._readout = Sis3820Readout(self.mcs)
         self._acquisition = Sis3820Acquisition(
-            self.mcs, self._readout, input_mode, input_polarity, count_on_start
+            self.mcs, input_mode, input_polarity, count_on_start
         )
         self._hinted_channels = tuple(hinted_channels)
         self.add_readables(
@@ -408,26 +338,18 @@ class Sis3820Mcs(StandardFlyable[TriggerInfo, TriggerInfo], StandardReadable):
 
     async def describe_collect(self) -> dict[str, DataKey]:
         return {
-            f"{self.name}-point_index": DataKey(
-                source=self.mcs.current_channel.source,
+            f"{self.name}-channel{n}": DataKey(
+                source=mca.data.source,
                 dtype="integer",
-                dtype_numpy=np.dtype(np.int64).str,
+                dtype_numpy=np.dtype(np.int32).str,
                 shape=[],
-            ),
-            **{
-                f"{self.name}-channel{n}": DataKey(
-                    source=mca.data.source,
-                    dtype="integer",
-                    dtype_numpy=np.dtype(np.int32).str,
-                    shape=[],
-                    units="counts",
-                )
-                for n, mca in self.mcs.mcas.items()
-            },
+                units="counts",
+            )
+            for n, mca in self.mcs.mcas.items()
         }
 
     async def collect_pages(self) -> AsyncIterator[PartialEventPage]:
-        if page := await self._readout.next_page(self.name):
+        if page := self._acquisition.next_page(self.name):
             yield page
 
     @AsyncStatus.wrap

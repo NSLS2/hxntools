@@ -6,7 +6,6 @@ import pytest
 from ophyd_async.core import (
     DetectorTrigger,
     TriggerInfo,
-    callback_on_mock_execute,
     callback_on_mock_put,
     get_mock_put,
     set_mock_value,
@@ -26,20 +25,6 @@ async def make_sis():
     set_mock_value(sis.mcs.max_channels, 100)
     for mca in sis.mcs.mcas.values():
         set_mock_value(mca.nmax, 100)
-
-        def erase(mca=mca):
-            set_mock_value(mca.nord, 0)
-            set_mock_value(mca.data, np.array([0], dtype=np.int32))
-
-        callback_on_mock_execute(mca.erase, erase)
-
-        async def refresh(value, mca=mca):
-            set_mock_value(mca.reading, True)
-            previous = await mca.read_time.get_value()
-            set_mock_value(mca.read_time, previous + 1)
-            set_mock_value(mca.reading, False)
-
-        callback_on_mock_put(mca.read_array, refresh)
 
     def arm(value):
         set_mock_value(sis.mcs.current_channel, 0)
@@ -72,28 +57,13 @@ async def pages(sis):
     return [page async for page in sis.collect_pages()]
 
 
-def test_valid_prefix_excludes_dummy_stale_and_unread_bins():
+def test_collection_requires_completed_acquisition():
     async def scenario():
         sis = await make_sis()
-        publish(sis, 4, [91, 92, 93, 94], [81, 82, 83, 84])
         await sis.prepare(info())
         await sis.kickoff()
-        assert await pages(sis) == []
-        # Some mca drivers force NORD=1 even when no complete bins exist.
-        publish(sis, 0, [0], [0])
-        assert await pages(sis) == []
-        # One input's record refresh is behind the hardware progress.
-        publish(sis, 3, [11, 22, 33], [101, 102])
-        first, = await pages(sis)
-        np.testing.assert_array_equal(first["data"]["sis-point_index"], [0, 1])
-        np.testing.assert_array_equal(first["data"]["sis-channel1"], [11, 22])
-        np.testing.assert_array_equal(first["data"]["sis-channel2"], [101, 102])
-        assert await pages(sis) == []
-        publish(sis, 3, [11, 22, 33], [101, 102, 103])
-        second, = await pages(sis)
-        np.testing.assert_array_equal(second["data"]["sis-point_index"], [2])
-        np.testing.assert_array_equal(second["data"]["sis-channel1"], [33])
-        np.testing.assert_array_equal(second["data"]["sis-channel2"], [103])
+        with pytest.raises(RuntimeError, match="Complete SIS3820 before collecting"):
+            await pages(sis)
         await sis.unstage()
 
     run(scenario())
@@ -112,8 +82,9 @@ def test_completion_waits_for_barrier_and_preserves_final_counts():
         await done
         # Complete retains the final snapshot; future IOC changes cannot alter it.
         publish(sis, 0, [0], [0])
-        final, = await pages(sis)
-        np.testing.assert_array_equal(final["data"]["sis-point_index"], [0, 1, 2, 3])
+        (final,) = await pages(sis)
+        assert set(await sis.describe_collect()) == {"sis-channel1", "sis-channel2"}
+        assert set(final["data"]) == {"sis-channel1", "sis-channel2"}
         np.testing.assert_array_equal(
             final["data"]["sis-channel1"], [11, 22, 33, 16777217]
         )
@@ -163,9 +134,6 @@ def test_completion_propagates_read_error_without_count_timeout():
         with pytest.raises(OSError, match="MCA read failed") as caught:
             await sis.complete()
         assert caught.value is failure
-        with pytest.raises(OSError, match="MCA read failed") as collected:
-            await pages(sis)
-        assert collected.value is failure
         await sis.unstage()
 
     run(scenario())
@@ -192,8 +160,7 @@ def test_interruption_disarms_and_releases_pending_completion(operation):
         publish(sis, 2, [5, 6], [7, 8])
         set_mock_value(sis.mcs.acquiring, False)
         await sis.complete()
-        page, = await pages(sis)
-        np.testing.assert_array_equal(page["data"]["sis-point_index"], [0, 1])
+        (page,) = await pages(sis)
         np.testing.assert_array_equal(page["data"]["sis-channel1"], [5, 6])
         await sis.unstage()
 
@@ -205,9 +172,7 @@ def test_insufficient_capacity_is_rejected_before_arming(capacity_owner):
     async def scenario():
         sis = await make_sis()
         capacity = (
-            sis.mcs.max_channels
-            if capacity_owner == "driver"
-            else sis.mcs.mcas[2].nmax
+            sis.mcs.max_channels if capacity_owner == "driver" else sis.mcs.mcas[2].nmax
         )
         set_mock_value(capacity, 3)
         with pytest.raises(ValueError, match="requested 4 bins, capacity is 3"):
@@ -236,21 +201,6 @@ def test_unsupported_acquisition_contract_is_rejected_before_arming(
         with pytest.raises(ValueError, match=message):
             await sis.prepare(trigger_info)
         assert get_mock_put(sis.mcs.erase_start).call_count == 0
-        await sis.unstage()
-
-    run(scenario())
-
-
-def test_bin_counter_reset_after_collection_is_an_error():
-    async def scenario():
-        sis = await make_sis()
-        await sis.prepare(info())
-        await sis.kickoff()
-        publish(sis, 2, [11, 22], [101, 102])
-        await pages(sis)
-        publish(sis, 0, [0], [0])
-        with pytest.raises(RuntimeError, match="bin count changed unexpectedly"):
-            await pages(sis)
         await sis.unstage()
 
     run(scenario())
@@ -289,7 +239,7 @@ def test_arm_failure_disarms_and_releases_subscriptions():
     run(scenario())
 
 
-def test_single_bin_keeps_zero_counts_and_the_first_point():
+def test_single_bin_keeps_zero_counts():
     async def scenario():
         sis = await make_sis()
         await sis.prepare(info(1))
@@ -297,8 +247,7 @@ def test_single_bin_keeps_zero_counts_and_the_first_point():
         publish(sis, 1, [0], [17])
         set_mock_value(sis.mcs.acquiring, False)
         await sis.complete()
-        page, = await pages(sis)
-        np.testing.assert_array_equal(page["data"]["sis-point_index"], [0])
+        (page,) = await pages(sis)
         np.testing.assert_array_equal(page["data"]["sis-channel1"], [0])
         np.testing.assert_array_equal(page["data"]["sis-channel2"], [17])
         await sis.unstage()
@@ -318,51 +267,8 @@ def test_reprepare_cannot_erase_an_acquisition_with_uncollected_data():
         await sis.complete()
         with pytest.raises(RuntimeError, match="before preparing another acquisition"):
             await sis.prepare(info(2))
-        page, = await pages(sis)
+        (page,) = await pages(sis)
         np.testing.assert_array_equal(page["data"]["sis-channel1"], [11, 22, 33, 44])
-        await sis.unstage()
-
-    run(scenario())
-
-
-def test_live_collection_waits_for_a_fresh_first_bin_not_the_dummy_array():
-    async def scenario():
-        sis = await make_sis()
-        await sis.prepare(info())
-        await sis.kickoff()
-        publish(sis, 0, [0], [0])
-        set_mock_value(sis.mcs.current_channel, 1)
-        reading_started = {n: asyncio.Event() for n in sis.mcs.mcas}
-        release = asyncio.Event()
-
-        for n, mca in sis.mcs.mcas.items():
-            def start(value, n=n, mca=mca):
-                set_mock_value(mca.reading, True)
-                set_mock_value(mca.read_time, 1.0)
-                reading_started[n].set()
-
-            callback_on_mock_put(mca.read_array, start)
-
-        async def install_new_data():
-            await release.wait()
-            publish(sis, 1, [11], [101])
-            for mca in sis.mcs.mcas.values():
-                set_mock_value(mca.reading, False)
-
-        installer = asyncio.create_task(install_new_data())
-        collecting = asyncio.create_task(pages(sis))
-        await asyncio.gather(*(event.wait() for event in reading_started.values()))
-        await wait_for_pending_wakeups()
-        assert not collecting.done()
-        release.set()
-        page, = await collecting
-        await installer
-        np.testing.assert_array_equal(page["data"]["sis-point_index"], [0])
-        np.testing.assert_array_equal(page["data"]["sis-channel1"], [11])
-        np.testing.assert_array_equal(page["data"]["sis-channel2"], [101])
-        for mca in sis.mcs.mcas.values():
-            assert mca.read_time._cache is None
-            assert mca.reading._cache is None
         await sis.unstage()
 
     run(scenario())
